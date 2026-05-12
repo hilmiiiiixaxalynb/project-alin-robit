@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Kalkulator Matrix</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<div class="container">
+
+    <h1>Matrix Calc</h1>
+    <p class="subtitle">Kalkulator operasi matrix lengkap</p>
+
+    <form method="POST" id="mainForm">
+
+        <!-- Hidden fields to preserve matrix values on submit -->
+        <input type="hidden" id="hiddenRowsA" name="rowsA" value="{{ request.form.get('rowsA', '') }}">
+        <input type="hidden" id="hiddenColsA" name="colsA" value="{{ request.form.get('colsA', '') }}">
+        <input type="hidden" id="hiddenRowsB" name="rowsB" value="{{ request.form.get('rowsB', '') }}">
+        <input type="hidden" id="hiddenColsB" name="colsB" value="{{ request.form.get('colsB', '') }}">
+
+        <!-- Matrix A -->
+        <div class="card">
+            <h2>Matrix A <span class="badge">Input</span></h2>
+            <div class="size-row">
+                <input type="number" id="rowsA" placeholder="Baris" min="1" max="6">
+                <span>×</span>
+                <input type="number" id="colsA" placeholder="Kolom" min="1" max="6">
+                <button type="button" class="btn-gen" onclick="generateMatrix('A')">Buat Matrix A</button>
+            </div>
+            <div id="matrixA" class="matrix-grid"></div>
+        </div>
+
+        <!-- Matrix B -->
+        <div class="card" id="matrixB-section">
+            <h2>Matrix B <span class="badge">Input</span></h2>
+            <div class="size-row">
+                <input type="number" id="rowsB" placeholder="Baris" min="1" max="6">
+                <span>×</span>
+                <input type="number" id="colsB" placeholder="Kolom" min="1" max="6">
+                <button type="button" class="btn-gen" onclick="generateMatrix('B')">Buat Matrix B</button>
+            </div>
+            <div id="matrixB" class="matrix-grid"></div>
+        </div>
+
+        <!-- Operasi -->
+        <div class="card">
+            <h2>Operasi</h2>
+            <div class="select-wrap">
+                <select name="operation" id="operationSelect" onchange="toggleMatrixB()">
+                    <option value="tambah">➕ Penjumlahan (A + B)</option>
+                    <option value="kurang">➖ Pengurangan (A − B)</option>
+                    <option value="kali">✖️ Perkalian (A × B)</option>
+                    <option value="transpose">↗️ Transpose (Aᵀ)</option>
+                    <option value="determinan">⬛ Determinan (det A)</option>
+                    <option value="invers">🔄 Invers (A⁻¹)</option>
+                </select>
+            </div>
+        </div>
+
+        <button type="submit" class="btn-hitung">HITUNG</button>
+
+    </form>
+
+    {% if error %}
+    <div class="error-box">⚠️ {{ error }}</div>
+    {% endif %}
+
+    {% if hasil is not none %}
+    <div class="hasil-card">
+        <h2>▶ Hasil</h2>
+        {% if hasil is iterable and hasil is not string %}
+            {% if hasil[0] is iterable and hasil[0] is not string %}
+                <div class="hasil-matrix">
+                    {% for row in hasil %}
+                    <div class="hasil-row">
+                        {% for val in row %}
+                        <div class="hasil-cell">{{ val }}</div>
+                        {% endfor %}
+                    </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <!-- 1D (row vector) -->
+                <div class="hasil-matrix">
+                    <div class="hasil-row">
+                        {% for val in hasil %}
+                        <div class="hasil-cell">{{ val }}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+        {% else %}
+            <div class="hasil-scalar">{{ hasil }}</div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+</div>
+
+<script>
+// Operations that need Matrix B
+const BUTUH_B = ['tambah', 'kurang', 'kali'];
+
+// Store matrix data across submits
+const savedData = {
+    A: { rows: 0, cols: 0, values: {} },
+    B: { rows: 0, cols: 0, values: {} }
+};
+
+function generateMatrix(prefix) {
+    const rows = parseInt(document.getElementById(`rows${prefix}`).value) || 0;
+    const cols = parseInt(document.getElementById(`cols${prefix}`).value) || 0;
+
+    if (!rows || !cols) return;
+
+    savedData[prefix].rows = rows;
+    savedData[prefix].cols = cols;
+
+    // Update hidden fields
+    document.getElementById(`hiddenRows${prefix}`).value = rows;
+    document.getElementById(`hiddenCols${prefix}`).value = cols;
+
+    renderMatrix(prefix, rows, cols, savedData[prefix].values);
+}
+
+function renderMatrix(prefix, rows, cols, savedValues = {}) {
+    const container = document.getElementById(`matrix${prefix}`);
+    let html = '';
+    for (let i = 0; i < rows; i++) {
+        html += `<div class="matrix-row">`;
+        for (let j = 0; j < cols; j++) {
+            const key = `${i}_${j}`;
+            const val = savedValues[key] ?? '';
+            html += `<input type="number" class="matrix-cell" name="${prefix}${i}${j}" 
+                           value="${val}" 
+                           oninput="savedData['${prefix}'].values['${i}_${j}'] = this.value"
+                           required>`;
+        }
+        html += `</div>`;
+    }
+    container.innerHTML = html;
+}
+
+function toggleMatrixB() {
+    const op = document.getElementById('operationSelect').value;
+    const section = document.getElementById('matrixB-section');
+    section.classList.toggle('hidden', !BUTUH_B.includes(op));
+}
+
+// Restore matrix inputs after form submit (using server-echoed form values)
+function restoreFromServer() {
+    const rowsA = parseInt("{{ request.form.get('rowsA', 0) }}") || 0;
+    const colsA = parseInt("{{ request.form.get('colsA', 0) }}") || 0;
+    const rowsB = parseInt("{{ request.form.get('rowsB', 0) }}") || 0;
+    const colsB = parseInt("{{ request.form.get('colsB', 0) }}") || 0;
+    const op    = "{{ request.form.get('operation', 'tambah') }}";
+
+    if (rowsA && colsA) {
+        document.getElementById('rowsA').value = rowsA;
+        document.getElementById('colsA').value = colsA;
+        // Collect values from server-echoed form
+        const valsA = {};
+        {% for i in range(10) %}
+            {% for j in range(10) %}
+                {% if request.form.get('A' ~ i ~ j) is not none %}
+                    valsA['{{ i }}_{{ j }}'] = "{{ request.form.get('A' ~ i ~ j, '') }}";
+                {% endif %}
+            {% endfor %}
+        {% endfor %}
+        savedData.A = { rows: rowsA, cols: colsA, values: valsA };
+        renderMatrix('A', rowsA, colsA, valsA);
+    }
+
+    if (rowsB && colsB) {
+        document.getElementById('rowsB').value = rowsB;
+        document.getElementById('colsB').value = colsB;
+        const valsB = {};
+        {% for i in range(10) %}
+            {% for j in range(10) %}
+                {% if request.form.get('B' ~ i ~ j) is not none %}
+                    valsB['{{ i }}_{{ j }}'] = "{{ request.form.get('B' ~ i ~ j, '') }}";
+                {% endif %}
+            {% endfor %}
+        {% endfor %}
+        savedData.B = { rows: rowsB, cols: colsB, values: valsB };
+        renderMatrix('B', rowsB, colsB, valsB);
+    }
+
+    // Restore operation select
+    document.getElementById('operationSelect').value = op;
+    toggleMatrixB();
+}
+
+// On submit: sync hidden fields & values
+document.getElementById('mainForm').addEventListener('submit', function () {
+    document.getElementById('hiddenRowsA').value = savedData.A.rows;
+    document.getElementById('hiddenColsA').value = savedData.A.cols;
+    document.getElementById('hiddenRowsB').value = savedData.B.rows;
+    document.getElementById('hiddenColsB').value = savedData.B.cols;
+});
+
+// Init on load
+window.addEventListener('DOMContentLoaded', () => {
+    restoreFromServer();
+    toggleMatrixB();
+});
+</script>
+
+</body>
+</html>
